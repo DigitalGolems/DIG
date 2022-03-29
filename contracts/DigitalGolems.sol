@@ -2,30 +2,54 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.10;
 
-import "./ERC721URIStorage.sol";
+import "./BEP721URIStorage.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 import "../Utils/Owner.sol";
 import "../Utils/SafeMath.sol";
 import "../Utils/ControlledAccess.sol";
+import "./Interfaces/ICard.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/LinkTokenInterface.sol";
+import "./Interfaces/IDigitalGolems.sol";
 
-
-contract DigitalGolems is ERC721URIStorage, Owner, ControlledAccess {
+contract DigitalGolems is BEP721URIStorage, Owner, ControlledAccess, IDigitalGolems {
     using Counters for Counters.Counter;
+    using Strings for uint256;
     Counters.Counter private _tokenIds;
     using SafeMath for uint;
     using SafeMath32 for uint32;
     using SafeMath16 for uint16;
 
-    address private _gameAddress;
+    string presaleBaseCID = "Qmb7pUXwe5G4fUMV7ghDx4GkyQw8ZNYfkssEpCFnsV6ui6";
+    string presaleBaseURISuffix = ".json";
+
+    string laboratoryBaseCID = "";
+    string laboratoryBaseURISuffix = ".json";
+
+    string stakingBaseCID = "";
+    string stakingBaseURISuffix = ".json";
+
+    address private _stakingAddress;
     address private _presaleAddress;
     address private _labAddress;
 
-    constructor() ERC721("Digital.Golems", "DIG") {
+    constructor() BEP721("Digital.Golems", "DIG") {
     }
 
-    function setGameAddress(address _game) public isOwner {
-        _gameAddress = _game;
+    function changePresaleBaseCID(string memory newCID) public isOwner {
+        presaleBaseCID = newCID;
+    }
+
+    function changeLaboratoryCID(string memory newCID) public isOwner {
+        laboratoryBaseCID = newCID;
+    }
+
+    function changeStakingBaseCID(string memory newCID) public isOwner {
+        stakingBaseCID = newCID;
+    }
+
+    function setStakingAddress(address _staking) public isOwner {
+        _stakingAddress = _staking;
     }
 
     function setLabAddress(address _lab) public isOwner {
@@ -35,120 +59,95 @@ contract DigitalGolems is ERC721URIStorage, Owner, ControlledAccess {
     function setPresaleAddress(address _presale) public isOwner {
         _presaleAddress = _presale;
     }
- 
-    function changeAmountOfNumAbilities(uint8 _newAmount) public isOwner {
-        amountOfNumAbilities = _newAmount;
+
+    function setCard(address _card) public isOwner {
+        card = ICard(_card);
     }
 
-    function changeAmountOfBoolAbilities(uint8 _newAmount) public isOwner {
-        amountOfBoolAbilities = _newAmount;
-    }
-
-    function getAmountOfNumAbilities() public view returns(uint8){
-        return amountOfNumAbilities;
-    }
-
-    function getAmountOfBoolAbilities() public view returns(uint8){
-        return amountOfBoolAbilities;
-    }
-
-    function changeAmountOfKinds(uint8 _newAmount) public isOwner {
-        amountOfKinds = _newAmount;
-    }
-
-    function changeAmountOfSeries(uint8 _newAmount) public isOwner {
-        amountOfSeries = _newAmount;
-    }
-
-    function getAmountOfKinds() public view returns(uint8){
-        return amountOfKinds;
-    }
-
-    function getAmountOfSeries() public view returns(uint8){
-        return amountOfSeries;
-    }
-
-    function awardItem(
+    function awardItemLaboratory(
         address player,
-        string memory tokenURI, 
-        uint8 _v,
-        bytes32 r,
-        bytes32 s,
-        uint8[] memory kindSeries
+        uint256 orderID
     )
-        public 
-        onlyGameOrPresale
-        onlyValidMint(_v, r, s, tokenURI, player)
+        public
+        onlyValidAddresses
     {
-        //проверить есть ли ассеты
         _tokenIds.increment();
 
         uint256 newItemId = _tokenIds.current();
         _mint(player, newItemId);
+        string memory id = orderID.toString();
+        string memory tokenURI = string(abi.encodePacked(
+          "https://ipfs.io/ipfs/",
+          laboratoryBaseCID,
+          "/",
+          id,
+          laboratoryBaseURISuffix
+        ));
         _setTokenURI(newItemId, tokenURI);
-        createCard(
+        card.createCard(
             player,
-            newItemId,
-            kindSeries[0], 
-            kindSeries[1], 
-            tokenURI
+            newItemId
         );
     }
 
+    function awardItemStaking(
+        address player,
+        uint256 orderID
+    )
+        public
+        onlyValidAddresses
+    {
+        _tokenIds.increment();
 
-    //onlyGameOrPresale
-    function decreaseNumAbilityAfterSession(uint256 _ID) public onlyGameOrPresale {
-        for (uint8 i = 0; i < amountOfNumAbilities; i++) {
-            if (_golemToNumAbility[_ID][i] != 0){
-                _golemToNumAbility[_ID][i] = _golemToNumAbility[_ID][i].sub(1);
-            }
-        }
-    }
-
-    function increaseNumAbilityAfterFeeding(uint256 _ID) public onlyGameOrPresale {
-        for (uint8 i = 0; i < amountOfNumAbilities; i++) {
-            if (_golemToNumAbility[_ID][i] < _golemToAlwaysNumAbility[_ID][i]) {
-                _golemToNumAbility[_ID][i] = _golemToNumAbility[_ID][i].add(1);
-            }
-        }
-    }
-
-    function increaseNumAbilityAfterPreservation(uint256 _ID, uint8 _num) public onlyGameOrPresale {
-        _golemToAlwaysNumAbility[_ID][_num] = _golemToAlwaysNumAbility[_ID][_num].add(1);
+        uint256 newItemId = _tokenIds.current();
+        _mint(player, newItemId);
+        string memory id = orderID.toString();
+        string memory tokenURI = string(abi.encodePacked(
+          "https://ipfs.io/ipfs/",
+          stakingBaseCID,
+          "/",
+          id,
+          stakingBaseURISuffix
+        ));
+        _setTokenURI(newItemId, tokenURI);
+        card.createCard(
+            player,
+            newItemId
+        );
     }
 
     //for presale
     //only presale address
     function mintPresale(
-        address player, 
-        string memory tokenURI,
-        uint8 kind,
-        uint8 series
+        address player
     )
         public
-        onlyGameOrPresale
+        onlyValidAddresses
     {
         _tokenIds.increment();
 
         uint256 newItemId = _tokenIds.current();
         _mint(player, newItemId);
+        string memory id = newItemId.toString();
+        string memory tokenURI = string(abi.encodePacked(
+          "https://ipfs.io/ipfs/",
+          presaleBaseCID,
+          "/",
+          id,
+          presaleBaseURISuffix
+        ));
         _setTokenURI(newItemId, tokenURI);
-        createCard(
+        card.createCard(
             player,
-            newItemId,
-            kind, 
-            series, 
-            tokenURI
+            newItemId
         );
     }
 
     function ownerMint(
-        address player, 
-        string memory tokenURI,
-        uint8 kind,
-        uint8 series
+        address player,
+        string memory tokenURI
     )
-        public 
+        public
         isOwner
     {
         _tokenIds.increment();
@@ -156,28 +155,21 @@ contract DigitalGolems is ERC721URIStorage, Owner, ControlledAccess {
         uint256 newItemId = _tokenIds.current();
         _mint(player, newItemId);
         _setTokenURI(newItemId, tokenURI);
-        createCard(
+        card.createCard(
             player,
-            newItemId,
-            kind, 
-            series, 
-            tokenURI
+            newItemId
         );
     }
 
-    modifier onlyGameOrPresale() {
+    modifier onlyValidAddresses() {
         require(
-            (msg.sender == _presaleAddress) 
-            || 
-            (msg.sender == _gameAddress)
+            (msg.sender == _presaleAddress)
             ||
-            (msg.sender == _labAddress) 
-            , "Only Game,Lab,Presale");
+            (msg.sender == _stakingAddress)
+            ||
+            (msg.sender == _labAddress)
+            , "only Valid Addresses");
         _;
-    }
-
-    function withdrawLINK() public isOwner{
-        LinkTokenInterface(_LINK).transfer(owner, LinkTokenInterface(_LINK).balanceOf(address(this)));
     }
 
 }
